@@ -1796,7 +1796,7 @@ mod tests {
     }
 
     #[test]
-    fn test_score_formula_readme_example_rows() {
+    fn scoring_examples() {
         // Pins every "Example scores" row in README.md (and the worked
         // examples in docs/scoring-spec.md) to compute_score_pure so the
         // documentation can never drift from the implementation again.
