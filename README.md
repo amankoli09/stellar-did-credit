@@ -140,6 +140,7 @@ On-chain proposal creation, weighted voting, and multi-step execution for updati
 | `update_voter_weight(admin, voter, weight)`                | Admin updates or deregisters a voter (weight = 0)      |
 | `set_quorum(admin, quorum_required)`                       | Admin sets the default quorum for future proposals     |
 | `get_proposal(proposal_id)`                                | Returns a proposal by ID                               |
+| `list_voters()`                                            | Returns all registered voters with their current weights. |
 | `cancel_proposal(canceller, proposal_id)`                  | Proposer/admin cancels; sets `cancelled: bool`, blocks further voting/execution |
 
 ### revocation-registry
