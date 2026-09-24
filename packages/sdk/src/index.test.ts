@@ -2385,6 +2385,12 @@ describe("parseContractErrorCode", () => {
       throwContractError("Error(Contract, #19)", "governance"),
     ).toThrow(new GovernanceError(19, "InvalidVotingPeriod (code 19)"));
   });
+
+  it("maps InvalidIssuerTier identity-oracle errors to their variant name", () => {
+    expect(() =>
+      throwContractError("Error(Contract, #11)", "identity-oracle"),
+    ).toThrow(new IdentityOracleError(11, "InvalidIssuerTier (code 11)"));
+  });
 });
 
 describe("batchRevokeVC", () => {
