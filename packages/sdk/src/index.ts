@@ -172,6 +172,7 @@ const IDENTITY_ORACLE_ERROR_CODES: Record<number, string> = {
   8: "ContractPaused",
   9: "InvalidRevocationRegistry",
   10: "VCLimitReached",
+  11: "InvalidIssuerTier",
 };
 
 const CREDIT_ORACLE_ERROR_CODES: Record<number, string> = {
