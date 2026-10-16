@@ -58,6 +58,10 @@ export interface RecencyDecayConfig {
   decayBpsPerDay: number;
   minRecencyBps: number;
 }
+export interface CredentialTypeWeight {
+  type: string;
+  weight: number;
+}
 export interface RepaymentRecord {
   onTimeCount: number;
   totalCount: number;
@@ -2607,6 +2611,27 @@ export class StellarDIDCreditSDK {
     );
 
     return txHash;
+  }
+
+  /**
+   * List known credential types and their configured weights.
+   *
+   * @param types - Optional list of credential types to query (defaults to standard types)
+   * @returns Array of credential types and their weights in basis points
+   */
+  async listCredentialTypeWeights(
+    types: string[] = ["generic", "kyc", "employment", "education", "income"],
+  ): Promise<CredentialTypeWeight[]> {
+    const results: CredentialTypeWeight[] = [];
+    for (const t of types) {
+      try {
+        const weight = await this.getCredentialTypeWeight(t);
+        results.push({ type: t, weight });
+      } catch {
+        // Skip types that fail to query
+      }
+    }
+    return results;
   }
 
   /**

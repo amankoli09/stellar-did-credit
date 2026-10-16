@@ -766,6 +766,27 @@ stellar-did cooldown
 # JSON output
 stellar-did cooldown --json
 ```
+
+#### `vc-type-weight` — Manage credential type weights
+
+Manage and inspect credential type weight multipliers configured on the `credit-oracle` contract.
+
+```bash
+# Fetch weight multiplier for a type (e.g. kyc, employment)
+stellar-did vc-type-weight get kyc
+
+# JSON output
+stellar-did vc-type-weight get kyc --json
+
+# List configured credential types and their weights
+stellar-did vc-type-weight list
+
+# JSON output for list
+stellar-did vc-type-weight list --json
+
+# Set weight multiplier for a credential type (admin only, in basis points: 100 = 1.0x, 150 = 1.5x)
+stellar-did vc-type-weight set <admin-secret> kyc 150
+```
 #### `compute-score` — Compute a credit score
 
 Submits a transaction to compute and persist a credit score on-chain. Requires a funded keypair to pay transaction fees.
