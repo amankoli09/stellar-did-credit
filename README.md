@@ -779,6 +779,16 @@ stellar-did recency-decay
 stellar-did recency-decay --json
 ```
 
+#### `cooldown` — Show compute cooldown
+
+Fetches the compute-score cooldown (in ledgers and approximate time) currently configured on the credit-oracle contract (read-only, no fees). Supports `--json` for machine-readable output.
+
+```bash
+stellar-did cooldown
+
+# JSON output
+stellar-did cooldown --json
+```
 #### `compute-score` — Compute a credit score
 
 Submits a transaction to compute and persist a credit score on-chain. Requires a funded keypair to pay transaction fees.

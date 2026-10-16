@@ -324,6 +324,26 @@ function printRecencyDecayConfig(config: RecencyDecayConfig): void {
 }
 
 /**
+ * Print compute cooldown in ledgers with an approximate wall-clock time estimate.
+ * Stellar ledgers close approximately every 5 seconds.
+ */
+function printComputeCooldown(ledgers: number): void {
+  const SECONDS_PER_LEDGER = 5;
+  const totalSeconds = ledgers * SECONDS_PER_LEDGER;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const approxTime =
+    minutes > 0 ? `~${minutes}m ${seconds}s` : `~${seconds}s`;
+
+  console.log();
+  console.log("┌─────────────────────────────────────────┐");
+  console.log(`│  Cooldown (ledgers): ${String(ledgers).padStart(17)} │`);
+  console.log(`│  Approx time:        ${approxTime.padStart(17)} │`);
+  console.log("└─────────────────────────────────────────┘");
+  console.log();
+}
+
+/**
  * Print a list of credential anchors as a readable table.
  */
 function printVCRecords(records: VCRecord[]): void {
@@ -973,6 +993,58 @@ program
       }
 
       printRecencyDecayConfig(decayConfig);
+    } catch (err) {
+      console.error(
+        "Failed:",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// Command: cooldown
+// ---------------------------------------------------------------------------
+
+program
+  .command("cooldown")
+  .description(
+    "Fetch the compute-score cooldown (in ledgers and approximate time) from the credit-oracle contract.",
+  )
+  .option("--json", "Output as JSON")
+  .action(async (cmdOptions: { json?: boolean }) => {
+    const options = program.opts();
+    const network = options.network as NetworkType;
+    const config = loadConfig(network);
+    validateConfig(config, ["creditOracleId"], true);
+
+    const sdk = new StellarDIDCreditSDK(config);
+
+    if (!cmdOptions.json) {
+      console.log(`Fetching compute cooldown on ${network}...`);
+    }
+
+    try {
+      const ledgers = await sdk.getComputeCooldownLedgers();
+      const SECONDS_PER_LEDGER = 5;
+      const approxSeconds = ledgers * SECONDS_PER_LEDGER;
+
+      if (cmdOptions.json) {
+        console.log(
+          JSON.stringify(
+            {
+              cooldown_ledgers: ledgers,
+              approx_seconds: approxSeconds,
+            },
+            null,
+            2,
+          ),
+        );
+        process.exit(0);
+        return;
+      }
+
+      printComputeCooldown(ledgers);
     } catch (err) {
       console.error(
         "Failed:",
