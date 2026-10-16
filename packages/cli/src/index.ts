@@ -28,6 +28,7 @@ import {
   type VCRecord,
   type ScoringWeights,
   type TxStats,
+  type RecencyDecayConfig,
 } from "@stellar-did-credit/sdk";
 import { loadConfig, validateConfig, type NetworkType } from "./config";
 import { readBatchCsv, writeBatchResults, type BatchResult } from "./batch";
@@ -306,6 +307,19 @@ function printTxStats(stats: TxStats): void {
   console.log(row("TX Count (30d)", String(stats.txCount30d)));
   console.log(row("Avg Counterparties", String(stats.avgCounterparties)));
   console.log(border("└", "┘"));
+  console.log();
+}
+
+/**
+ * Print the recency decay configuration as a short human-readable table.
+ */
+function printRecencyDecayConfig(config: RecencyDecayConfig): void {
+  console.log();
+  console.log("┌─────────────────────────────────────┐");
+  console.log(`│  Enabled:           ${String(config.enabled).padStart(15)} │`);
+  console.log(`│  decay_bps_per_day: ${String(config.decayBpsPerDay).padStart(15)} │`);
+  console.log(`│  min_recency_bps:   ${String(config.minRecencyBps).padStart(15)} │`);
+  console.log("└─────────────────────────────────────┘");
   console.log();
 }
 
@@ -908,6 +922,57 @@ program
       } else {
         printTxStats(stats);
       }
+    } catch (err) {
+      console.error(
+        "Failed:",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  });
+
+// ---------------------------------------------------------------------------
+// Command: recency-decay
+// ---------------------------------------------------------------------------
+
+program
+  .command("recency-decay")
+  .description(
+    "Fetch the recency decay configuration currently active on the credit-oracle contract.",
+  )
+  .option("--json", "Output as JSON")
+  .action(async (cmdOptions: { json?: boolean }) => {
+    const options = program.opts();
+    const network = options.network as NetworkType;
+    const config = loadConfig(network);
+    validateConfig(config, ["creditOracleId"], true);
+
+    const sdk = new StellarDIDCreditSDK(config);
+
+    if (!cmdOptions.json) {
+      console.log(`Fetching recency decay configuration on ${network}...`);
+    }
+
+    try {
+      const decayConfig = await sdk.getRecencyDecayConfig();
+
+      if (cmdOptions.json) {
+        console.log(
+          JSON.stringify(
+            {
+              enabled: decayConfig.enabled,
+              decay_bps_per_day: decayConfig.decayBpsPerDay,
+              min_recency_bps: decayConfig.minRecencyBps,
+            },
+            null,
+            2,
+          ),
+        );
+        process.exit(0);
+        return;
+      }
+
+      printRecencyDecayConfig(decayConfig);
     } catch (err) {
       console.error(
         "Failed:",

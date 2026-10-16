@@ -768,6 +768,17 @@ Fetches the current scoring weights (VC, transaction, repayment) configured on t
 stellar-did weights
 ```
 
+#### `recency-decay` — Show recency decay configuration
+
+Fetches the recency decay configuration currently active on the credit-oracle contract (read-only, no fees). Supports `--json` for machine-readable output.
+
+```bash
+stellar-did recency-decay
+
+# JSON output
+stellar-did recency-decay --json
+```
+
 #### `compute-score` — Compute a credit score
 
 Submits a transaction to compute and persist a credit score on-chain. Requires a funded keypair to pay transaction fees.
