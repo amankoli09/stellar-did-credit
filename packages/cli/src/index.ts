@@ -30,6 +30,7 @@ import {
   type ScoringWeights,
   type TxStats,
   type RecencyDecayConfig,
+  type IssuerTier,
 } from "@stellar-did-credit/sdk";
 import { loadConfig, validateConfig, type NetworkType } from "./config";
 import { readBatchCsv, writeBatchResults, type BatchResult } from "./batch";
@@ -75,14 +76,16 @@ function parseSecret(secret: string): Keypair {
 /**
  * Validates a Stellar address (G... or C..., 56 base32 chars).
  */
-function assertStellarAddress(label: string, addr: string): void {
+function assertStellarAddress(label: string, addr: string): boolean {
   const upper = addr.toUpperCase();
   if (!/^[GC][A-Z2-7]{55}$/.test(upper)) {
     console.error(
       `Error: ${label} must be a valid Stellar address (G... or C..., 56 base32 characters). Got: ${addr}`,
     );
     process.exit(1);
+    return false;
   }
+  return true;
 }
 
 /**
@@ -357,6 +360,52 @@ function printComputeCooldown(ledgers: number): void {
   console.log(`│  Cooldown (ledgers): ${String(ledgers).padStart(17)} │`);
   console.log(`│  Approx time:        ${approxTime.padStart(17)} │`);
   console.log("└─────────────────────────────────────────┘");
+  console.log();
+}
+
+/**
+ * Format issuer tier as multiplier string (e.g. "100 bps = 1.00x").
+ */
+function formatIssuerTierMultiplier(bps: number): string {
+  return `${bps} bps = ${(bps / 100).toFixed(2)}x`;
+}
+
+/**
+ * Print a single issuer tier as a formatted box.
+ */
+function printIssuerTier(issuer: string, bps: number): void {
+  const mult = formatIssuerTierMultiplier(bps);
+  console.log();
+  console.log("┌─────────────────────────────────────────────────────────────┐");
+  console.log(`│  Issuer:     ${issuer.padEnd(46)} │`);
+  console.log(`│  Tier (bps): ${String(bps).padStart(46)} │`);
+  console.log(`│  Multiplier: ${mult.padStart(46)} │`);
+  console.log("└─────────────────────────────────────────────────────────────┘");
+  console.log();
+}
+
+/**
+ * Print a table of issuer tiers.
+ */
+function printIssuerTiers(
+  tiers: IssuerTier[],
+): void {
+  console.log();
+  if (tiers.length === 0) {
+    console.log("No issuers registered.");
+    return;
+  }
+
+  console.log("┌─────────────────────────────────────────────────────────┬──────────────┬──────────────────┐");
+  console.log("│ Issuer Address                                          │ Tier (bps)   │ Multiplier       │");
+  console.log("├─────────────────────────────────────────────────────────┼──────────────┼──────────────────┤");
+  for (const item of tiers) {
+    const issuerCol = item.issuer.padEnd(55);
+    const bpsCol = String(item.bps).padStart(12);
+    const multCol = (item.multiplier ?? formatIssuerTierMultiplier(item.bps)).padStart(16);
+    console.log(`│ ${issuerCol} │ ${bpsCol} │ ${multCol} │`);
+  }
+  console.log("└─────────────────────────────────────────────────────────┴──────────────┴──────────────────┘");
   console.log();
 }
 
@@ -964,6 +1013,213 @@ program
       process.exit(1);
     }
   });
+
+// ---------------------------------------------------------------------------
+// Command group: issuer-tier
+// ---------------------------------------------------------------------------
+
+const issuerTier = program
+  .command("issuer-tier")
+  .description("Manage and view issuer trust multiplier tiers.");
+
+issuerTier
+  .command("get")
+  .description("Fetch the trust tier multiplier for an issuer.")
+  .argument("<issuer-address>", "Stellar G... address of the credential issuer")
+  .option("--json", "Output as JSON")
+  .action(async (issuerAddress: string, cmdOptions: { json?: boolean }) => {
+    const options = program.opts();
+    const network = options.network as NetworkType;
+    const config = loadConfig(network);
+    validateConfig(config, ["identityOracleId"], true);
+
+    const upperAddr = issuerAddress.toUpperCase();
+    if (!assertStellarAddress("issuer-address", upperAddr)) {
+      return;
+    }
+
+    const sdk = new StellarDIDCreditSDK(config);
+
+    if (!cmdOptions.json) {
+      console.log(
+        `Fetching trust tier for issuer ${upperAddr} on ${network}...`,
+      );
+    }
+
+    try {
+      const bps = await sdk.getIssuerTier(upperAddr);
+      const multiplier = formatIssuerTierMultiplier(bps);
+
+      if (cmdOptions.json) {
+        console.log(
+          JSON.stringify(
+            {
+              issuer: upperAddr,
+              bps,
+              multiplier,
+            },
+            null,
+            2,
+          ),
+        );
+        process.exit(0);
+        return;
+      }
+
+      printIssuerTier(upperAddr, bps);
+    } catch (err) {
+      console.error(
+        "Failed:",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  });
+
+issuerTier
+  .command("list")
+  .description("List all registered issuers and their trust tier multipliers.")
+  .option("--json", "Output as JSON")
+  .action(async (cmdOptions: { json?: boolean }) => {
+    const options = program.opts();
+    const network = options.network as NetworkType;
+    const config = loadConfig(network);
+    validateConfig(config, ["identityOracleId"], true);
+
+    const sdk = new StellarDIDCreditSDK(config);
+
+    if (!cmdOptions.json) {
+      console.log(`Fetching issuer trust tiers on ${network}...`);
+    }
+
+    try {
+      let tiers: IssuerTier[] = [];
+      if (typeof sdk.listIssuerTiers === "function") {
+        tiers = await sdk.listIssuerTiers();
+      } else {
+        const issuers = await sdk.listIssuers();
+        tiers = await Promise.all(
+          issuers.map(async (issuer) => {
+            const bps = await sdk.getIssuerTier(issuer);
+            return {
+              issuer,
+              bps,
+              multiplier: formatIssuerTierMultiplier(bps),
+            };
+          }),
+        );
+      }
+
+      if (cmdOptions.json) {
+        console.log(JSON.stringify(tiers, null, 2));
+        process.exit(0);
+        return;
+      }
+
+      printIssuerTiers(tiers);
+    } catch (err) {
+      console.error(
+        "Failed:",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  });
+
+issuerTier
+  .command("set")
+  .description(
+    "Set an issuer's trust tier multiplier in basis points (admin only).",
+  )
+  .argument("<arg1>", "Issuer Stellar G... address (or admin secret)")
+  .argument("<arg2>", "Weight in basis points (or issuer address)")
+  .argument("[arg3]", "Admin secret key (or weight in basis points)")
+  .option(
+    "--admin-secret <secret>",
+    "Stellar secret key of the contract admin (starts with S)",
+    process.env["ADMIN_SECRET"],
+  )
+  .action(
+    async (
+      arg1: string,
+      arg2: string,
+      arg3: string | undefined,
+      cmdOptions: { adminSecret?: string },
+    ) => {
+      const options = program.opts();
+      const network = options.network as NetworkType;
+      const config = loadConfig(network);
+      validateConfig(config, ["identityOracleId"], true);
+
+      let issuerAddress: string;
+      let bps: number;
+      let rawAdminSecret: string | undefined;
+
+      if (arg1.startsWith("S") && !/^\d+$/.test(arg1)) {
+        rawAdminSecret = arg1;
+        issuerAddress = arg2;
+        bps = parseInt(arg3 ?? "0", 10);
+      } else {
+        issuerAddress = arg1;
+        bps = parseInt(arg2, 10);
+        rawAdminSecret =
+          cmdOptions.adminSecret ?? arg3 ?? process.env["ADMIN_SECRET"];
+      }
+
+      if (!rawAdminSecret) {
+        console.error(
+          "Error: admin secret key is required. Provide via --admin-secret <secret> or set ADMIN_SECRET.",
+        );
+        process.exit(1);
+        return;
+      }
+
+      const adminKeypair = parseSecret(rawAdminSecret);
+      if (!adminKeypair) {
+        return;
+      }
+
+      const upperIssuer = issuerAddress.toUpperCase();
+      if (!assertStellarAddress("issuer-address", upperIssuer)) {
+        return;
+      }
+
+      if (isNaN(bps) || bps <= 0) {
+        console.error("Error: bps must be a positive number.");
+        process.exit(1);
+        return;
+      }
+
+      const sdk = new StellarDIDCreditSDK(config);
+      const mult = formatIssuerTierMultiplier(bps);
+
+      console.log(
+        `Setting trust tier for issuer ${upperIssuer} on ${network}...`,
+      );
+      console.log(`  Admin:      ${adminKeypair.publicKey()}`);
+      console.log(`  Multiplier: ${mult}`);
+
+      try {
+        const txHash = await sdk.setIssuerTier(
+          adminKeypair,
+          upperIssuer,
+          bps,
+        );
+
+        console.log();
+        console.log("Success!");
+        console.log(`  Transaction Hash: ${txHash}`);
+        console.log(`  Issuer:           ${upperIssuer}`);
+        console.log(`  Trust Tier:       ${mult}`);
+      } catch (err) {
+        console.error(
+          "Failed:",
+          err instanceof Error ? err.message : err,
+        );
+        process.exit(1);
+      }
+    },
+  );
 
 // ---------------------------------------------------------------------------
 // Command: weights

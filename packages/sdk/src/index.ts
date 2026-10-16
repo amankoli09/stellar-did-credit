@@ -58,6 +58,11 @@ export interface RecencyDecayConfig {
   decayBpsPerDay: number;
   minRecencyBps: number;
 }
+export interface IssuerTier {
+  issuer: string;
+  bps: number;
+  multiplier: string;
+}
 export interface RepaymentRecord {
   onTimeCount: number;
   totalCount: number;
@@ -2890,6 +2895,29 @@ export class StellarDIDCreditSDK {
     );
 
     return txHash;
+  }
+
+  /**
+   * List all registered issuers and their trust multiplier tiers.
+   *
+   * @returns Array of IssuerTier objects containing issuer address, bps, and multiplier string
+   */
+  async listIssuerTiers(): Promise<IssuerTier[]> {
+    const issuers = await this.listIssuers();
+    const results: IssuerTier[] = [];
+    for (const issuer of issuers) {
+      try {
+        const bps = await this.getIssuerTier(issuer);
+        results.push({
+          issuer,
+          bps,
+          multiplier: `${bps} bps = ${(bps / 100).toFixed(2)}x`,
+        });
+      } catch {
+        // Skip issuers that fail to query
+      }
+    }
+    return results;
   }
 
   /**

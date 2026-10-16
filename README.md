@@ -737,6 +737,27 @@ Lists all currently registered trusted credential issuers (read-only, no fees).
 stellar-did issuers
 ```
 
+#### `issuer-tier` — Manage issuer trust multipliers
+
+Manage and view issuer trust multiplier tiers configured on the `identity-oracle` contract.
+
+```bash
+# Fetch trust tier for an issuer (e.g. 100 bps = 1.00x, 200 bps = 2.00x)
+stellar-did issuer-tier get <issuer-address>
+
+# JSON output
+stellar-did issuer-tier get <issuer-address> --json
+
+# List all registered issuers and their trust tiers
+stellar-did issuer-tier list
+
+# JSON output for list
+stellar-did issuer-tier list --json
+
+# Set trust tier for an issuer in basis points (admin only)
+stellar-did issuer-tier set <issuer-address> 200 --admin-secret <admin-secret>
+```
+
 #### `weights` — Show scoring weights
 
 Fetches the current scoring weights (VC, transaction, repayment) configured on the credit-oracle contract (read-only, no fees).
