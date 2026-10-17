@@ -30,7 +30,7 @@ import {
   type ScoringWeights,
   type TxStats,
   type RecencyDecayConfig,
-  type IssuerTier,
+  type CredentialTypeWeight,
 } from "@stellar-did-credit/sdk";
 import { loadConfig, validateConfig, type NetworkType } from "./config";
 import { readBatchCsv, writeBatchResults, type BatchResult } from "./batch";
@@ -364,48 +364,41 @@ function printComputeCooldown(ledgers: number): void {
 }
 
 /**
- * Format issuer tier as multiplier string (e.g. "100 bps = 1.00x").
+ * Print a single credential type weight as a formatted box.
  */
-function formatIssuerTierMultiplier(bps: number): string {
-  return `${bps} bps = ${(bps / 100).toFixed(2)}x`;
-}
-
-/**
- * Print a single issuer tier as a formatted box.
- */
-function printIssuerTier(issuer: string, bps: number): void {
-  const mult = formatIssuerTierMultiplier(bps);
+function printCredentialTypeWeight(type: string, weight: number): void {
+  const mult = `${(weight / 100).toFixed(2)}x`;
   console.log();
-  console.log("┌─────────────────────────────────────────────────────────────┐");
-  console.log(`│  Issuer:     ${issuer.padEnd(46)} │`);
-  console.log(`│  Tier (bps): ${String(bps).padStart(46)} │`);
-  console.log(`│  Multiplier: ${mult.padStart(46)} │`);
-  console.log("└─────────────────────────────────────────────────────────────┘");
+  console.log("┌─────────────────────────────────────────┐");
+  console.log(`│  Credential Type: ${type.padStart(21)} │`);
+  console.log(`│  Weight (bps):    ${String(weight).padStart(21)} │`);
+  console.log(`│  Multiplier:      ${mult.padStart(21)} │`);
+  console.log("└─────────────────────────────────────────┘");
   console.log();
 }
 
 /**
- * Print a table of issuer tiers.
+ * Print a table of credential type weights.
  */
-function printIssuerTiers(
-  tiers: IssuerTier[],
+function printCredentialTypeWeights(
+  types: CredentialTypeWeight[],
 ): void {
   console.log();
-  if (tiers.length === 0) {
-    console.log("No issuers registered.");
+  if (types.length === 0) {
+    console.log("No credential types configured.");
     return;
   }
 
-  console.log("┌─────────────────────────────────────────────────────────┬──────────────┬──────────────────┐");
-  console.log("│ Issuer Address                                          │ Tier (bps)   │ Multiplier       │");
-  console.log("├─────────────────────────────────────────────────────────┼──────────────┼──────────────────┤");
-  for (const item of tiers) {
-    const issuerCol = item.issuer.padEnd(55);
-    const bpsCol = String(item.bps).padStart(12);
-    const multCol = (item.multiplier ?? formatIssuerTierMultiplier(item.bps)).padStart(16);
-    console.log(`│ ${issuerCol} │ ${bpsCol} │ ${multCol} │`);
+  console.log("┌───────────────────────┬──────────────┬────────────┐");
+  console.log("│ Credential Type       │ Weight (bps) │ Multiplier │");
+  console.log("├───────────────────────┼──────────────┼────────────┤");
+  for (const item of types) {
+    const typeCol = item.type.padEnd(21);
+    const weightCol = String(item.weight).padStart(12);
+    const multCol = `${(item.weight / 100).toFixed(2)}x`.padStart(10);
+    console.log(`│ ${typeCol} │ ${weightCol} │ ${multCol} │`);
   }
-  console.log("└─────────────────────────────────────────────────────────┴──────────────┴──────────────────┘");
+  console.log("└───────────────────────┴──────────────┴────────────┘");
   console.log();
 }
 
@@ -1470,6 +1463,183 @@ program
       process.exit(1);
     }
   });
+
+// ---------------------------------------------------------------------------
+// Command group: vc-type-weight
+// ---------------------------------------------------------------------------
+
+const vcTypeWeight = program
+  .command("vc-type-weight")
+  .description("Manage and view credential type scoring weights.");
+
+vcTypeWeight
+  .command("get")
+  .description(
+    "Fetch the weight multiplier in basis points for a credential type.",
+  )
+  .argument("<type>", "Credential type label (e.g. kyc, employment)")
+  .option("--json", "Output as JSON")
+  .action(async (credentialType: string, cmdOptions: { json?: boolean }) => {
+    const options = program.opts();
+    const network = options.network as NetworkType;
+    const config = loadConfig(network);
+    validateConfig(config, ["creditOracleId"], true);
+
+    const sdk = new StellarDIDCreditSDK(config);
+
+    if (!cmdOptions.json) {
+      console.log(
+        `Fetching weight for credential type '${credentialType}' on ${network}...`,
+      );
+    }
+
+    try {
+      const weight = await sdk.getCredentialTypeWeight(credentialType);
+
+      if (cmdOptions.json) {
+        console.log(
+          JSON.stringify(
+            {
+              type: credentialType,
+              weight,
+            },
+            null,
+            2,
+          ),
+        );
+        process.exit(0);
+        return;
+      }
+
+      printCredentialTypeWeight(credentialType, weight);
+    } catch (err) {
+      console.error(
+        "Failed:",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  });
+
+vcTypeWeight
+  .command("list")
+  .description("List configured credential types and their weight multipliers.")
+  .option("--json", "Output as JSON")
+  .action(async (cmdOptions: { json?: boolean }) => {
+    const options = program.opts();
+    const network = options.network as NetworkType;
+    const config = loadConfig(network);
+    validateConfig(config, ["creditOracleId"], true);
+
+    const sdk = new StellarDIDCreditSDK(config);
+
+    if (!cmdOptions.json) {
+      console.log(`Fetching credential type weights on ${network}...`);
+    }
+
+    try {
+      let list: CredentialTypeWeight[] = [];
+      if (typeof sdk.listCredentialTypeWeights === "function") {
+        list = await sdk.listCredentialTypeWeights();
+      } else {
+        const defaultTypes = [
+          "generic",
+          "kyc",
+          "employment",
+          "education",
+          "income",
+        ];
+        list = await Promise.all(
+          defaultTypes.map(async (t) => ({
+            type: t,
+            weight: await sdk.getCredentialTypeWeight(t),
+          })),
+        );
+      }
+
+      if (cmdOptions.json) {
+        console.log(JSON.stringify(list, null, 2));
+        process.exit(0);
+        return;
+      }
+
+      printCredentialTypeWeights(list);
+    } catch (err) {
+      console.error(
+        "Failed:",
+        err instanceof Error ? err.message : err,
+      );
+      process.exit(1);
+    }
+  });
+
+vcTypeWeight
+  .command("set")
+  .description(
+    "Set the weight multiplier for a credential type (admin only).",
+  )
+  .argument(
+    "<admin-secret>",
+    "Stellar secret key of the contract admin (starts with S)",
+  )
+  .argument("<type>", "Credential type label (e.g. kyc, employment)")
+  .argument(
+    "<weight>",
+    "Weight in basis points (e.g. 100 = 1.0x, 150 = 1.5x)",
+    parseInt,
+  )
+  .action(
+    async (
+      adminSecret: string,
+      credentialType: string,
+      weightBps: number,
+    ) => {
+      const options = program.opts();
+      const network = options.network as NetworkType;
+      const config = loadConfig(network);
+      validateConfig(config, ["creditOracleId"], true);
+
+      const adminKeypair = parseSecret(adminSecret);
+      if (!adminKeypair) {
+        return;
+      }
+
+      if (isNaN(weightBps) || weightBps < 0) {
+        console.error("Error: weight must be a non-negative number.");
+        process.exit(1);
+        return;
+      }
+
+      const sdk = new StellarDIDCreditSDK(config);
+
+      console.log(
+        `Setting weight for '${credentialType}' to ${weightBps} bps on ${network}...`,
+      );
+      console.log(`  Admin: ${adminKeypair.publicKey()}`);
+
+      try {
+        const txHash = await sdk.setCredentialTypeWeight(
+          adminKeypair,
+          credentialType,
+          weightBps,
+        );
+
+        console.log();
+        console.log("Success!");
+        console.log(`  Transaction Hash: ${txHash}`);
+        console.log(`  Type:             ${credentialType}`);
+        console.log(
+          `  Weight:           ${weightBps} bps (${(weightBps / 100).toFixed(2)}x)`,
+        );
+      } catch (err) {
+        console.error(
+          "Failed:",
+          err instanceof Error ? err.message : err,
+        );
+        process.exit(1);
+      }
+    },
+  );
 
 // ---------------------------------------------------------------------------
 // Command: anchor-vc
